@@ -4,14 +4,26 @@ import (
 	"fmt"
 	"net"
 	"os"
-  "strings"
+	"strings"
 )
 
+func handleEcho(conn net.Conn, path string) {
+	responseBody := path[6:]
+
+	statusLine := "HTTP/1.1 200 OK"
+	headerFormat := "Content-Type: text/plain"
+	headerBodySize := fmt.Sprintf("Content-Length: %d", len(responseBody))
+
+	responseHeaders := strings.Join([]string{statusLine, headerFormat, headerBodySize}, "\r\n")
+
+	conn.Write([]byte(responseHeaders + "\r\n\r\n" + responseBody))
+}
+
 func parseRequest(data string) (verb, path string) {
-  requestInfo := strings.Split(data, "\r\n")[0]
-  parts := strings.Split(requestInfo, " ")
-  method := parts[0]
-  path = parts[1]
+	requestInfo := strings.Split(data, "\r\n")[0]
+	parts := strings.Split(requestInfo, " ")
+	method := parts[0]
+	path = parts[1]
 
 	return method, path
 }
@@ -28,9 +40,11 @@ func handleClient(conn net.Conn) {
 	}
 
 	_, path := parseRequest(string(buf[:n]))
-	switch path {
-	case "/":
+	switch {
+	case path == "/":
 		conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+	case strings.HasPrefix(path, "/echo"):
+		handleEcho(conn, path)
 	default:
 		conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
 	}
