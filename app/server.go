@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -12,12 +13,22 @@ const (
 	status201       = "HTTP/1.1 201 Created"
 	status404       = "HTTP/1.1 404 Not Found"
 	contentTypeText = "Content-Type: text/plain"
+	encondingGzip   = "Content-Encoding: gzip"
 )
 
-func handleEcho(conn net.Conn, path string) {
+func handleEcho(conn net.Conn, path string, headers map[string]string) {
+	supportedEndodings := []string{"gzip"}
+	encoding, exists := headers["Accept-Encoding"]
+
+	responseHeaders := []string{contentTypeText}
+
+	if exists && slices.Contains(supportedEndodings, encoding) {
+		responseHeaders = append(responseHeaders, encondingGzip)
+	}
+
 	responseBody := path[6:]
 
-	response := buildResponse(status200, contentTypeText, responseBody)
+	response := buildResponse(status200, strings.Join(responseHeaders, "\r\n"), responseBody)
 
 	conn.Write([]byte(response))
 }
@@ -125,7 +136,7 @@ func handleRequest(conn net.Conn) {
 	case path == "/user-agent":
 		handleUserAgent(conn, headers)
 	case strings.HasPrefix(path, "/echo"):
-		handleEcho(conn, path)
+		handleEcho(conn, path, headers)
 	case strings.HasPrefix(path, "/files") && method == "GET":
 		handleGetFiles(conn, path)
 	case strings.HasPrefix(path, "/files") && method == "POST":
