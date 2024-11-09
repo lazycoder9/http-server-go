@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"strings"
@@ -17,6 +18,22 @@ func handleEcho(conn net.Conn, path string) {
 	responseBody := path[6:]
 
 	response := buildResponse(status200, contentTypeText, responseBody)
+
+	conn.Write([]byte(response))
+}
+
+func handleFiles(conn net.Conn, path string) {
+	root := "/tmp"
+	fileSystem := os.DirFS(root)
+	fileContent, err := fs.ReadFile(fileSystem, path[7:])
+
+	var response string
+
+	if err != nil {
+		response = buildResponse(status404, "", "")
+	} else {
+		response = buildResponse(status200, "Content-Type: application/octet-stream", string(fileContent))
+	}
 
 	conn.Write([]byte(response))
 }
@@ -67,7 +84,7 @@ func buildResponse(status, contentTypeHeader, body string) string {
 	return responseHeaders + "\r\n\r\n" + body
 }
 
-func handleClient(conn net.Conn) {
+func handleRequest(conn net.Conn) {
 	defer conn.Close()
 
 	buf := make([]byte, 1024)
@@ -87,6 +104,8 @@ func handleClient(conn net.Conn) {
 		handleUserAgent(conn, headers)
 	case strings.HasPrefix(path, "/echo"):
 		handleEcho(conn, path)
+	case strings.HasPrefix(path, "/files"):
+		handleFiles(conn, path)
 	default:
 		conn.Write([]byte(status404 + "\r\n\r\n"))
 	}
@@ -112,6 +131,6 @@ func main() {
 			continue
 		}
 
-		go handleClient(conn)
+		go handleRequest(conn)
 	}
 }
