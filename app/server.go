@@ -9,6 +9,7 @@ import (
 
 const (
 	status200       = "HTTP/1.1 200 OK"
+	status201       = "HTTP/1.1 201 Created"
 	status404       = "HTTP/1.1 404 Not Found"
 	contentTypeText = "Content-Type: text/plain"
 )
@@ -21,7 +22,7 @@ func handleEcho(conn net.Conn, path string) {
 	conn.Write([]byte(response))
 }
 
-func handleFiles(conn net.Conn, path string) {
+func handleGetFiles(conn net.Conn, path string) {
 	root := os.Args[2]
 	fileContent, err := os.ReadFile(root + strings.TrimPrefix(path, "/files/"))
 
@@ -36,6 +37,28 @@ func handleFiles(conn net.Conn, path string) {
 	conn.Write([]byte(response))
 }
 
+func handlePostFiles(conn net.Conn, path string, headers map[string]string, body string) {
+	root := os.Args[2]
+	fileName := strings.TrimPrefix(path, "/files/")
+
+	var response string
+
+	file, err := os.Create(root + fileName)
+
+	if err != nil {
+		response = buildResponse(status404, "", "")
+	}
+
+	_, errWrite := file.Write([]byte(body))
+
+	if errWrite != nil {
+		response = buildResponse(status404, "", "")
+	}
+
+	response = buildResponse(status201, "", "")
+	conn.Write([]byte(response))
+}
+
 func handleUserAgent(conn net.Conn, headers map[string]string) {
 	responseBody := headers["User-Agent"]
 
@@ -44,16 +67,17 @@ func handleUserAgent(conn net.Conn, headers map[string]string) {
 	conn.Write([]byte(response))
 }
 
-func parseRequest(data string) (method, path string, headers map[string]string) {
+func parseRequest(data string) (method, path string, headers map[string]string, body string) {
 	requestParts := strings.Split(data, "\r\n")
 	requestStatusLine := requestParts[0]
 	parts := strings.Split(requestStatusLine, " ")
 	method = parts[0]
 	path = parts[1]
+	body = requestParts[len(requestParts)-1]
 
 	headers = parseHeaders(requestParts[1 : len(requestParts)-2])
 
-	return method, path, headers
+	return method, path, headers, body
 }
 
 func parseHeaders(headers []string) map[string]string {
@@ -93,7 +117,7 @@ func handleRequest(conn net.Conn) {
 		return
 	}
 
-	_, path, headers := parseRequest(string(buf[:n]))
+	method, path, headers, body := parseRequest(string(buf[:n]))
 
 	switch {
 	case path == "/":
@@ -102,8 +126,10 @@ func handleRequest(conn net.Conn) {
 		handleUserAgent(conn, headers)
 	case strings.HasPrefix(path, "/echo"):
 		handleEcho(conn, path)
-	case strings.HasPrefix(path, "/files"):
-		handleFiles(conn, path)
+	case strings.HasPrefix(path, "/files") && method == "GET":
+		handleGetFiles(conn, path)
+	case strings.HasPrefix(path, "/files") && method == "POST":
+		handlePostFiles(conn, path, headers, body)
 	default:
 		conn.Write([]byte(status404 + "\r\n\r\n"))
 	}
