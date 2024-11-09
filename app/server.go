@@ -7,25 +7,64 @@ import (
 	"strings"
 )
 
+const (
+	status200       = "HTTP/1.1 200 OK"
+	status404       = "HTTP/1.1 404 Not Found"
+	contentTypeText = "Content-Type: text/plain"
+)
+
 func handleEcho(conn net.Conn, path string) {
 	responseBody := path[6:]
 
-	statusLine := "HTTP/1.1 200 OK"
-	headerFormat := "Content-Type: text/plain"
-	headerBodySize := fmt.Sprintf("Content-Length: %d", len(responseBody))
+	response := buildResponse(status200, contentTypeText, responseBody)
 
-	responseHeaders := strings.Join([]string{statusLine, headerFormat, headerBodySize}, "\r\n")
-
-	conn.Write([]byte(responseHeaders + "\r\n\r\n" + responseBody))
+	conn.Write([]byte(response))
 }
 
-func parseRequest(data string) (verb, path string) {
-	requestInfo := strings.Split(data, "\r\n")[0]
-	parts := strings.Split(requestInfo, " ")
-	method := parts[0]
+func handleUserAgent(conn net.Conn, headers map[string]string) {
+	responseBody := headers["User-Agent"]
+
+	response := buildResponse(status200, contentTypeText, responseBody)
+
+	conn.Write([]byte(response))
+}
+
+func parseRequest(data string) (method, path string, headers map[string]string) {
+	requestParts := strings.Split(data, "\r\n")
+	requestStatusLine := requestParts[0]
+	parts := strings.Split(requestStatusLine, " ")
+	method = parts[0]
 	path = parts[1]
 
-	return method, path
+	headers = parseHeaders(requestParts[1 : len(requestParts)-2])
+
+	return method, path, headers
+}
+
+func parseHeaders(headers []string) map[string]string {
+	parsedHeaders := make(map[string]string)
+
+	for _, header := range headers {
+		headerParts := strings.Split(header, ": ")
+		headerName := headerParts[0]
+		headerValue := headerParts[1]
+
+		parsedHeaders[headerName] = headerValue
+	}
+
+	return parsedHeaders
+}
+
+func buildResponse(status, contentTypeHeader, body string) string {
+	contentLengthHeader := fmt.Sprintf("Content-Length: %d", len(body))
+
+	responseHeaders := strings.Join([]string{
+		status,
+		contentTypeHeader,
+		contentLengthHeader,
+	}, "\r\n")
+
+	return responseHeaders + "\r\n\r\n" + body
 }
 
 func handleClient(conn net.Conn) {
@@ -39,14 +78,17 @@ func handleClient(conn net.Conn) {
 		return
 	}
 
-	_, path := parseRequest(string(buf[:n]))
+	_, path, headers := parseRequest(string(buf[:n]))
+
 	switch {
 	case path == "/":
-		conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+		conn.Write([]byte(status200 + "\r\n\r\n"))
+	case path == "/user-agent":
+		handleUserAgent(conn, headers)
 	case strings.HasPrefix(path, "/echo"):
 		handleEcho(conn, path)
 	default:
-		conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+		conn.Write([]byte(status404 + "\r\n\r\n"))
 	}
 }
 
