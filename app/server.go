@@ -18,11 +18,20 @@ const (
 
 func handleEcho(conn net.Conn, path string, headers map[string]string) {
 	supportedEndodings := []string{"gzip"}
-	encoding, exists := headers["Accept-Encoding"]
+	encodings, exists := headers["Accept-Encoding"]
+
+	var acceptedEncoding string
+
+	for _, e := range strings.Split(encodings, ", ") {
+		if slices.Contains(supportedEndodings, e) {
+			acceptedEncoding = e
+			break
+		}
+	}
 
 	responseHeaders := []string{contentTypeText}
 
-	if exists && slices.Contains(supportedEndodings, encoding) {
+	if exists && acceptedEncoding == "gzip" {
 		responseHeaders = append(responseHeaders, encondingGzip)
 	}
 
