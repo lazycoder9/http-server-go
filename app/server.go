@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/fs"
 	"net"
 	"os"
 	"strings"
@@ -23,9 +22,8 @@ func handleEcho(conn net.Conn, path string) {
 }
 
 func handleFiles(conn net.Conn, path string) {
-	root := "/tmp"
-	fileSystem := os.DirFS(root)
-	fileContent, err := fs.ReadFile(fileSystem, path[7:])
+	root := os.Args[2]
+	fileContent, err := os.ReadFile(root + strings.TrimPrefix(path, "/files/"))
 
 	var response string
 
