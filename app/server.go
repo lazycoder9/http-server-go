@@ -10,17 +10,6 @@ import (
 	"strings"
 )
 
-const (
-	status200       = "HTTP/1.1 200 OK"
-	status201       = "HTTP/1.1 201 Created"
-	status404       = "HTTP/1.1 404 Not Found"
-	contentTypeText = "Content-Type: text/plain"
-	encondingGzip   = "Content-Encoding: gzip"
-)
-
-func handleHome(conn net.Conn, request *Request) {
-	conn.Write([]byte(status200 + "\r\n\r\n"))
-}
 
 func handleEcho(conn net.Conn, request *Request) {
 	supportedEndodings := []string{"gzip"}
@@ -142,7 +131,7 @@ func buildResponse(status, contentTypeHeader, body string) string {
 	return responseHeaders + "\r\n\r\n" + body
 }
 
-func handleRequest(conn net.Conn) {
+func handleRequest(conn net.Conn, router *Router) {
 	defer conn.Close()
 
 	buf := make([]byte, 1024)
@@ -156,20 +145,22 @@ func handleRequest(conn net.Conn) {
 	method, path, headers, body := parseRequest(string(buf[:n]))
 	request := NewRequest(method, path, headers, body)
 
-	switch {
-	case path == "/":
-		conn.Write([]byte(status200 + "\r\n\r\n"))
-	case path == "/user-agent":
-		handleUserAgent(conn, request)
-	case strings.HasPrefix(path, "/echo"):
-		handleEcho(conn, request)
-	case strings.HasPrefix(path, "/files") && method == "GET":
-		handleGetFiles(conn, request)
-	case strings.HasPrefix(path, "/files") && method == "POST":
-		handlePostFiles(conn, request)
-	default:
-		conn.Write([]byte(status404 + "\r\n\r\n"))
-	}
+  handler := router.route(request)
+  handler(conn, request)
+
+	// switch {
+	// case path == "/":
+	// case path == "/user-agent":
+	// 	handleUserAgent(conn, request)
+	// case strings.HasPrefix(path, "/echo"):
+	// 	handleEcho(conn, request)
+	// case strings.HasPrefix(path, "/files") && method == "GET":
+	// 	handleGetFiles(conn, request)
+	// case strings.HasPrefix(path, "/files") && method == "POST":
+	// 	handlePostFiles(conn, request)
+	// default:
+	// 	conn.Write([]byte(status404 + "\r\n\r\n"))
+	// }
 }
 
 func main() {
@@ -184,9 +175,7 @@ func main() {
 
 	fmt.Println("Listening on port 4221")
 	router := NewRouter()
-	router.route()
-	router.addRoute("get", "/", handleHome)
-	router.listRoutes()
+	router.addRoute("GET", "/", HandleHome)
 
 	for {
 		conn, err := listener.Accept()
@@ -196,6 +185,6 @@ func main() {
 			continue
 		}
 
-		go handleRequest(conn)
+		go handleRequest(conn, router)
 	}
 }
