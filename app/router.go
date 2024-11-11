@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 )
 
 type Router struct {
@@ -18,7 +20,17 @@ func (router *Router) addRoute(method, path string, handler Handler) {
 		router.routes[method] = make(map[string]Handler)
 	}
 
-	router.routes[method][path] = handler
+	var routePath string
+
+	pathParts := slices.DeleteFunc(strings.Split(path, "/"), func(s string) bool { return s == "" })
+
+	if len(pathParts) == 0 {
+		routePath = ""
+	} else {
+		routePath = pathParts[0]
+	}
+
+	router.routes[method]["/"+routePath] = handler
 }
 
 func (router *Router) listRoutes() {
@@ -33,20 +45,20 @@ func (router *Router) listRoutes() {
 }
 
 func (router *Router) route(request *Request) Handler {
-  routes := router.routes[request.method]
+	routes := router.routes[request.method]
 
-  handler := fetchHandler(routes, request)
+	handler := fetchHandler(routes, request)
 
-  return handler
+	return handler
 }
 
 func fetchHandler(routes map[string]Handler, request *Request) Handler {
-  handler, exists := routes[request.path]
+	handler, exists := routes[request.path]
 
-  if !exists {
-    fmt.Printf("Handler for %s %s does not exist\n", request.method, request.path)
-    return Handle404
-  }
+	if !exists {
+		fmt.Printf("Handler for %s %s does not exist\n", request.method, request.path)
+		return Handle404
+	}
 
-  return handler
+	return handler
 }

@@ -1,98 +1,13 @@
 package main
 
 import (
-	"bytes"
-	"compress/gzip"
 	"fmt"
 	"net"
 	"os"
-	"slices"
 	"strings"
 )
 
-
-func handleEcho(conn net.Conn, request *Request) {
-	supportedEndodings := []string{"gzip"}
-	encodings, exists := request.headers["Accept-Encoding"]
-
-	var acceptedEncoding string
-
-	for _, e := range strings.Split(encodings, ", ") {
-		if slices.Contains(supportedEndodings, e) {
-			acceptedEncoding = e
-			break
-		}
-	}
-
-	responseHeaders := []string{contentTypeText}
-	responseBody := request.path[6:]
-
-	if exists && acceptedEncoding == "gzip" {
-		responseHeaders = append(responseHeaders, encondingGzip)
-
-		var buf bytes.Buffer
-		zw := gzip.NewWriter(&buf)
-		_, err := zw.Write([]byte(responseBody))
-
-		if err != nil {
-			fmt.Println("Error writing to gzip: ", err.Error())
-		}
-
-		zw.Close()
-		responseBody = buf.String()
-	}
-
-	response := buildResponse(status200, strings.Join(responseHeaders, "\r\n"), responseBody)
-
-	conn.Write([]byte(response))
-}
-
-func handleGetFiles(conn net.Conn, request *Request) {
-	root := os.Args[2]
-	fileContent, err := os.ReadFile(root + strings.TrimPrefix(request.path, "/files/"))
-
-	var response string
-
-	if err != nil {
-		response = buildResponse(status404, "", "")
-	} else {
-		response = buildResponse(status200, "Content-Type: application/octet-stream", string(fileContent))
-	}
-
-	conn.Write([]byte(response))
-}
-
-func handlePostFiles(conn net.Conn, request *Request) {
-	root := os.Args[2]
-	fileName := strings.TrimPrefix(request.path, "/files/")
-
-	var response string
-
-	file, err := os.Create(root + fileName)
-
-	if err != nil {
-		response = buildResponse(status404, "", "")
-	}
-
-	_, errWrite := file.Write([]byte(request.body))
-
-	if errWrite != nil {
-		response = buildResponse(status404, "", "")
-	}
-
-	response = buildResponse(status201, "", "")
-	conn.Write([]byte(response))
-}
-
-func handleUserAgent(conn net.Conn, request *Request) {
-	responseBody := request.headers["User-Agent"]
-
-	response := buildResponse(status200, contentTypeText, responseBody)
-
-	conn.Write([]byte(response))
-}
-
-func parseRequest(data string) (method, path string, headers map[string]string, body string) {
+func parseRequest(data string) (method, path string, headers, params map[string]string, body string) {
 	requestParts := strings.Split(data, "\r\n")
 	requestStatusLine := requestParts[0]
 	parts := strings.Split(requestStatusLine, " ")
@@ -101,8 +16,20 @@ func parseRequest(data string) (method, path string, headers map[string]string, 
 	body = requestParts[len(requestParts)-1]
 
 	headers = parseHeaders(requestParts[1 : len(requestParts)-2])
+	pathParts := strings.Split(path, "/")
 
-	return method, path, headers, body
+	parsedPath := "/" + pathParts[1]
+	var pathParam string
+
+	if len(pathParts) > 2 {
+		pathParam = pathParts[2]
+	}
+
+	params = map[string]string{
+		"pathParam": pathParam,
+	}
+
+	return method, parsedPath, headers, params, body
 }
 
 func parseHeaders(headers []string) map[string]string {
@@ -142,25 +69,11 @@ func handleRequest(conn net.Conn, router *Router) {
 		return
 	}
 
-	method, path, headers, body := parseRequest(string(buf[:n]))
-	request := NewRequest(method, path, headers, body)
+	method, path, headers, params, body := parseRequest(string(buf[:n]))
+	request := NewRequest(method, path, headers, params, body)
 
-  handler := router.route(request)
-  handler(conn, request)
-
-	// switch {
-	// case path == "/":
-	// case path == "/user-agent":
-	// 	handleUserAgent(conn, request)
-	// case strings.HasPrefix(path, "/echo"):
-	// 	handleEcho(conn, request)
-	// case strings.HasPrefix(path, "/files") && method == "GET":
-	// 	handleGetFiles(conn, request)
-	// case strings.HasPrefix(path, "/files") && method == "POST":
-	// 	handlePostFiles(conn, request)
-	// default:
-	// 	conn.Write([]byte(status404 + "\r\n\r\n"))
-	// }
+	handler := router.route(request)
+	handler(conn, request)
 }
 
 func main() {
@@ -176,6 +89,10 @@ func main() {
 	fmt.Println("Listening on port 4221")
 	router := NewRouter()
 	router.addRoute("GET", "/", HandleHome)
+	router.addRoute("GET", "/user-agent", HandleUserAgent)
+	router.addRoute("GET", "/echo/{value}", HandleEcho)
+	router.addRoute("GET", "/files/{filename}", HandleGetFiles)
+	router.addRoute("POST", "/files/{filename}", HandlePostFiles)
 
 	for {
 		conn, err := listener.Accept()
