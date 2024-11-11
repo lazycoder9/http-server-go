@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func parseRequest(data string) (method, path string, headers, params map[string]string, body string) {
+func parseRequest(data string) (method, path string, params map[string]string, body string) {
 	requestParts := strings.Split(data, "\r\n")
 	requestStatusLine := requestParts[0]
 	parts := strings.Split(requestStatusLine, " ")
@@ -15,7 +15,6 @@ func parseRequest(data string) (method, path string, headers, params map[string]
 	path = parts[1]
 	body = requestParts[len(requestParts)-1]
 
-	headers = parseHeaders(requestParts[1 : len(requestParts)-2])
 	pathParts := strings.Split(path, "/")
 
 	parsedPath := "/" + pathParts[1]
@@ -29,7 +28,7 @@ func parseRequest(data string) (method, path string, headers, params map[string]
 		"pathParam": pathParam,
 	}
 
-	return method, parsedPath, headers, params, body
+	return method, parsedPath, params, body
 }
 
 func parseHeaders(headers []string) map[string]string {
@@ -58,7 +57,7 @@ func buildResponse(status, contentTypeHeader, body string) string {
 	return responseHeaders + "\r\n\r\n" + body
 }
 
-func handleRequest(conn net.Conn, router *Router) {
+func handleRequest(conn net.Conn, mids *Middlewares, router *Router) {
 	defer conn.Close()
 
 	buf := make([]byte, 1024)
@@ -69,8 +68,18 @@ func handleRequest(conn net.Conn, router *Router) {
 		return
 	}
 
-	method, path, headers, params, body := parseRequest(string(buf[:n]))
-	request := NewRequest(method, path, headers, params, body)
+	request := NewRequest()
+	request.raw = string(buf[:n])
+	fmt.Println("Before middlewares: ", request.headers)
+
+	mids.ApplyMiddlewares(conn, request)
+	fmt.Println("After middleware: ", request.headers)
+
+	method, path, params, body := parseRequest(string(buf[:n]))
+	request.method = method
+	request.path = path
+	request.params = params
+	request.body = body
 
 	handler := router.route(request)
 	handler(conn, request)
@@ -87,12 +96,16 @@ func main() {
 	defer listener.Close()
 
 	fmt.Println("Listening on port 4221")
+
 	router := NewRouter()
 	router.addRoute("GET", "/", HandleHome)
 	router.addRoute("GET", "/user-agent", HandleUserAgent)
 	router.addRoute("GET", "/echo/{value}", HandleEcho)
 	router.addRoute("GET", "/files/{filename}", HandleGetFiles)
 	router.addRoute("POST", "/files/{filename}", HandlePostFiles)
+
+	middlewares := InitMiddlewares()
+	middlewares.AddMiddleware(ParseHeaders)
 
 	for {
 		conn, err := listener.Accept()
@@ -102,6 +115,6 @@ func main() {
 			continue
 		}
 
-		go handleRequest(conn, router)
+		go handleRequest(conn, middlewares, router)
 	}
 }

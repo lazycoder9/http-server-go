@@ -6,14 +6,9 @@ type Request struct {
 	headers map[string]string
 	params  map[string]string
 	body    string
+	raw     string
 }
 
-func NewRequest(method, path string, headers, params map[string]string, body string) *Request {
-	return &Request{
-		method,
-		path,
-		headers,
-		params,
-		body,
-	}
+func NewRequest() *Request {
+	return &Request{}
 }
