@@ -18,6 +18,10 @@ const (
 	encondingGzip   = "Content-Encoding: gzip"
 )
 
+func handleHome(conn net.Conn, request *Request) {
+	conn.Write([]byte(status200 + "\r\n\r\n"))
+}
+
 func handleEcho(conn net.Conn, request *Request) {
 	supportedEndodings := []string{"gzip"}
 	encodings, exists := request.headers["Accept-Encoding"]
@@ -181,6 +185,8 @@ func main() {
 	fmt.Println("Listening on port 4221")
 	router := NewRouter()
 	router.route()
+	router.addRoute("get", "/", handleHome)
+	router.listRoutes()
 
 	for {
 		conn, err := listener.Accept()
