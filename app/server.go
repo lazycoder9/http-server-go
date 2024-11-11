@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
 	"net"
 	"os"
@@ -30,12 +32,22 @@ func handleEcho(conn net.Conn, path string, headers map[string]string) {
 	}
 
 	responseHeaders := []string{contentTypeText}
+	responseBody := path[6:]
 
 	if exists && acceptedEncoding == "gzip" {
 		responseHeaders = append(responseHeaders, encondingGzip)
-	}
 
-	responseBody := path[6:]
+		var buf bytes.Buffer
+		zw := gzip.NewWriter(&buf)
+		_, err := zw.Write([]byte(responseBody))
+
+		if err != nil {
+			fmt.Println("Error writing to gzip: ", err.Error())
+		}
+
+		zw.Close()
+		responseBody = buf.String()
+	}
 
 	response := buildResponse(status200, strings.Join(responseHeaders, "\r\n"), responseBody)
 
