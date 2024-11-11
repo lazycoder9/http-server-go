@@ -2,7 +2,4 @@ package main
 
 import "net"
 
-type Handler struct {
-	conn    net.Conn
-	request Request
-}
+type Handler func(conn net.Conn, request *Request)

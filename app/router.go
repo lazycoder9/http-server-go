@@ -2,21 +2,20 @@ package main
 
 import (
 	"fmt"
-	"net"
 )
 
 type Router struct {
-	routes map[string]map[string]func(net.Conn, *Request)
+	routes map[string]map[string]Handler
 }
 
 func NewRouter() *Router {
-	routes := make(map[string]map[string]func(net.Conn, *Request))
+	routes := make(map[string]map[string]Handler)
 	return &Router{routes}
 }
 
-func (router *Router) addRoute(method, path string, handler func(net.Conn, *Request)) {
+func (router *Router) addRoute(method, path string, handler Handler) {
 	if _, exists := router.routes[method]; !exists {
-		router.routes[method] = make(map[string]func(net.Conn, *Request))
+		router.routes[method] = make(map[string]Handler)
 	}
 
 	router.routes[method][path] = handler
