@@ -150,7 +150,7 @@ func handleRequest(conn net.Conn) {
 	}
 
 	method, path, headers, body := parseRequest(string(buf[:n]))
-  request := NewRequest(method, path, headers, body)
+	request := NewRequest(method, path, headers, body)
 
 	switch {
 	case path == "/":
@@ -179,6 +179,8 @@ func main() {
 	defer listener.Close()
 
 	fmt.Println("Listening on port 4221")
+	router := NewRouter()
+	router.route()
 
 	for {
 		conn, err := listener.Accept()
