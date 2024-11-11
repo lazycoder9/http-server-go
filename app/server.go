@@ -18,9 +18,9 @@ const (
 	encondingGzip   = "Content-Encoding: gzip"
 )
 
-func handleEcho(conn net.Conn, path string, headers map[string]string) {
+func handleEcho(conn net.Conn, request *Request) {
 	supportedEndodings := []string{"gzip"}
-	encodings, exists := headers["Accept-Encoding"]
+	encodings, exists := request.headers["Accept-Encoding"]
 
 	var acceptedEncoding string
 
@@ -32,7 +32,7 @@ func handleEcho(conn net.Conn, path string, headers map[string]string) {
 	}
 
 	responseHeaders := []string{contentTypeText}
-	responseBody := path[6:]
+	responseBody := request.path[6:]
 
 	if exists && acceptedEncoding == "gzip" {
 		responseHeaders = append(responseHeaders, encondingGzip)
@@ -54,9 +54,9 @@ func handleEcho(conn net.Conn, path string, headers map[string]string) {
 	conn.Write([]byte(response))
 }
 
-func handleGetFiles(conn net.Conn, path string) {
+func handleGetFiles(conn net.Conn, request *Request) {
 	root := os.Args[2]
-	fileContent, err := os.ReadFile(root + strings.TrimPrefix(path, "/files/"))
+	fileContent, err := os.ReadFile(root + strings.TrimPrefix(request.path, "/files/"))
 
 	var response string
 
@@ -69,9 +69,9 @@ func handleGetFiles(conn net.Conn, path string) {
 	conn.Write([]byte(response))
 }
 
-func handlePostFiles(conn net.Conn, path string, headers map[string]string, body string) {
+func handlePostFiles(conn net.Conn, request *Request) {
 	root := os.Args[2]
-	fileName := strings.TrimPrefix(path, "/files/")
+	fileName := strings.TrimPrefix(request.path, "/files/")
 
 	var response string
 
@@ -81,7 +81,7 @@ func handlePostFiles(conn net.Conn, path string, headers map[string]string, body
 		response = buildResponse(status404, "", "")
 	}
 
-	_, errWrite := file.Write([]byte(body))
+	_, errWrite := file.Write([]byte(request.body))
 
 	if errWrite != nil {
 		response = buildResponse(status404, "", "")
@@ -91,8 +91,8 @@ func handlePostFiles(conn net.Conn, path string, headers map[string]string, body
 	conn.Write([]byte(response))
 }
 
-func handleUserAgent(conn net.Conn, headers map[string]string) {
-	responseBody := headers["User-Agent"]
+func handleUserAgent(conn net.Conn, request *Request) {
+	responseBody := request.headers["User-Agent"]
 
 	response := buildResponse(status200, contentTypeText, responseBody)
 
@@ -150,18 +150,19 @@ func handleRequest(conn net.Conn) {
 	}
 
 	method, path, headers, body := parseRequest(string(buf[:n]))
+  request := NewRequest(method, path, headers, body)
 
 	switch {
 	case path == "/":
 		conn.Write([]byte(status200 + "\r\n\r\n"))
 	case path == "/user-agent":
-		handleUserAgent(conn, headers)
+		handleUserAgent(conn, request)
 	case strings.HasPrefix(path, "/echo"):
-		handleEcho(conn, path, headers)
+		handleEcho(conn, request)
 	case strings.HasPrefix(path, "/files") && method == "GET":
-		handleGetFiles(conn, path)
+		handleGetFiles(conn, request)
 	case strings.HasPrefix(path, "/files") && method == "POST":
-		handlePostFiles(conn, path, headers, body)
+		handlePostFiles(conn, request)
 	default:
 		conn.Write([]byte(status404 + "\r\n\r\n"))
 	}
